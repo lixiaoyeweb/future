@@ -1,0 +1,83 @@
+(function(window,undefined){
+
+    / * @return string 格式化后的字符串 */
+
+    function format(source, opts, config) {
+        var data = Array.prototype.slice.call(arguments, 1);
+        var toString = Object.prototype.toString;
+
+        // object as config
+        if (typeof data[1] === 'object') {
+            data = data.slice(1);
+        }
+        config = config || {};
+        var ld = config.ld || '\\{';
+        var rd = config.rd || '\\}';
+        var regex = new RegExp("#" + ld + "(.+?)" + rd, "g");
+
+        if (data.length) {
+            /* ie 下 Object.prototype.toString.call(null) == '[object Object]' */
+            data = data.length == 1 ? (opts !== null && (/\[object Array\]|\[object Object\]/.test(toString.call(opts))) ? opts : data) : data;
+            return source.replace(regex, function(match, key) {
+                var filters, replacer, i, len, func;
+                if (!data) return '';
+                filters = key.split("|");
+                key = trim.call(filters[0]);
+                replacer = data[key];
+                // chrome 下 typeof /a/ == 'function'
+                if ('[object Function]' == toString.call(replacer)) {
+                    replacer = replacer(key);
+                }
+                for (i = 1, len = filters.length; i < len; ++i) {
+                    func = format.filters[trim.call(filters[i])];
+                    if ('[object Function]' == toString.call(func)) {
+                        replacer = func(replacer, key);
+                    }
+                }
+                return (('undefined' == typeof replacer || replacer === null) ? '' : replacer);
+            });
+        }
+        return source;
+    };
+
+    format.filters = {
+        'escapeJs': function(str) {
+            if (!str || 'string' != typeof str) return str;
+            var i, len, charCode, ret = [];
+            for (i = 0, len = str.length; i < len; ++i) {
+                charCode = str.charCodeAt(i);
+                if (charCode > 255) {
+                    ret.push(str.charAt(i));
+                } else {
+                    ret.push('\\x' + charCode.toString(16));
+                }
+            }
+            return ret.join('');
+        },
+        'escapeString': function(str) {
+            if (!str || 'string' != typeof str) return str;
+            return str.replace(/["'<>\\\/`]/g, function($0) {
+                return '&#' + $0.charCodeAt(0) + ';';
+            });
+        },
+        'escapeUrl': function(str) {
+            if (!str || 'string' != typeof str) return str;
+            return encodeURIComponent(str);
+        },
+        'toInt': function(str) {
+            return parseInt(str, 10) || 0;
+        }
+    };
+
+    format.filters.js = format.filters.escapeJs;
+    format.filters.e = format.filters.escapeString;
+    format.filters.u = format.filters.escapeUrl;
+    format.filters.i = format.filters.toInt;
+
+    var trim = String.prototype.trim || function() {
+        return this.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+    };
+
+    window.format = format;
+
+})(window);
